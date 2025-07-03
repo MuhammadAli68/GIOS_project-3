@@ -4,13 +4,14 @@
 #define BUFSIZE (834)
 #define CACHE_MQ_NAME "/cache_mq"
 
-static shm_pool_t shm_pool;
+shm_pool_t shm_pool;
 
 /*
  __.__
 Replace with your implementation
  __.__
 */
+
 ssize_t handle_with_cache(gfcontext_t *ctx, const char *path, void* arg) {
     // 1. Acquire a shared memory object from the pool
     shm_object_t *shm_obj = shm_pool_acquire();
@@ -28,7 +29,7 @@ ssize_t handle_with_cache(gfcontext_t *ctx, const char *path, void* arg) {
 
     // 3. Wait until cache completes initial status (200/404) setup
     sem_wait(&shm_obj->write_complete);
-    printf("proxy worker %s waiting on response\n",pthread_self());
+    printf("proxy worker %lu waiting on response\n",(unsigned long)pthread_self());
     // 4. Handle cache miss
     if (shm_obj->status == 404 || shm_obj->file_size == (size_t)-1) {
         gfs_sendheader(ctx, GF_FILE_NOT_FOUND, 0);
@@ -63,14 +64,14 @@ ssize_t handle_with_cache(gfcontext_t *ctx, const char *path, void* arg) {
         // Notify cache that this chunk was read
         sem_post(&shm_obj->read_complete);
     }
-    printf("Proxy worker: %s finished working using shared memory: %s",pthread_self(),shm_obj.name);
+    printf("Proxy worker: %lu finished working using shared memory: %s",(unsigned long)pthread_self(),shm_obj->name);
     // 7. Release shared memory back to pool
     shm_pool_release(shm_obj);
     return bytes_sent;
 }
 
 
-void shm_pool_init(size_t num_segments, size_t segment_size) {
+void shm_pool_init(int num_segments, size_t segment_size) {
     shm_pool.total_segments = num_segments;
     shm_pool.segment_size = segment_size;
 
@@ -180,7 +181,7 @@ shm_object_t *shm_pool_acquire() {
     shm_object_t *shm_obj = (shm_object_t *)steque_pop(&shm_pool.shm_queue);
     shm_obj->used = 1;
     pthread_mutex_unlock(&shm_pool.lock);
-    printf("proxy worker %s acquired shared memory segment: %s\n",pthread_self(),shm_obj.name);
+    printf("proxy worker %lu acquired shared memory segment: %s\n",(unsigned long)pthread_self(),shm_obj->name);
     return shm_obj;
 }
 

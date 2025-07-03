@@ -126,11 +126,13 @@ int main(int argc, char **argv) {
 	attr.mq_curmsgs = 0;
 
 	mq_unlink(CACHE_MQ_NAME); // Ensure old queue is gone
-	cache_mq = mq_open(CACHE_MQ_NAME, O_CREAT | O_RDONLY, 0644, &attr);
+	cache_mq = mq_open(CACHE_MQ_NAME, O_CREAT | O_RDONLY, 0644, NULL);
 	if (cache_mq == -1) {
 		perror("mq_open");
 		exit(EXIT_FAILURE);
 	}
+	printf("Creating message queue %s with msgsize=%ld maxmsg=%ld\n",
+       CACHE_MQ_NAME, attr.mq_msgsize, attr.mq_maxmsg);
 
 	// Create worker threads
 	pthread_t workers[nthreads];
@@ -168,6 +170,7 @@ void* cache_worker(void* arg) {
             continue;
         }
 
+		//printf("sizeof(cache_request_t) = %lu\n", sizeof(cache_request_t));
         shm_object_t* shm_obj = (shm_object_t*)addr;
 
         // Set default: file not found
@@ -176,7 +179,7 @@ void* cache_worker(void* arg) {
 
         int fd = simplecache_get(request.path);
 
-		printf("Cache worker %d providing response to request in segment %s\n",pthread_self(),shm_obj->name);
+		printf("Cache worker %lu providing response to request in segment %s\n",(unsigned long)pthread_self(),shm_obj->name);
         if (fd >= 0) {
             shm_obj->status = 200;
 
@@ -198,7 +201,7 @@ void* cache_worker(void* arg) {
                 sem_wait(&shm_obj->read_complete);
                 total_sent += read_bytes;
             }
-			printf("Cache worker %d finished sending %d bytes of file",pthread_self(),shm_obj->file_size);
+			printf("Cache worker %lu finished sending %zu bytes of file",(unsigned long)pthread_self(),shm_obj->file_size);
             close(fd);
         }
         // Signal completion of metadata (status and file_size)
